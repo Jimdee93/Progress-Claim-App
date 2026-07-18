@@ -5,6 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { formatCents } from "@/lib/money";
 import NewClaimForm from "./dashboard/NewClaimForm";
 
+// Always reflects live DB state (claims, contract value) — never prerender
+// this at build time.
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const session = await auth();
 

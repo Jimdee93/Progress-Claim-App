@@ -17,8 +17,8 @@
 /.next/
 /out/
 
-# production
-/build
+# electron-builder output (icons in /build are intentionally tracked)
+/dist-electron
 
 # misc
 .DS_Store
