@@ -1,0 +1,129 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+model Project {
+  id                    String   @id @default(cuid())
+  name                  String
+  // Anchor figure — mirrors the workbook's hardcoded "Original Contract Value".
+  // Not a live sum of trades, so variations don't silently move it.
+  originalContractValueCents BigInt
+  retentionRateBps      Int      @default(500) // 5.00%
+  retentionCapCents     BigInt?
+  gstRateBps            Int      @default(1000) // 10.00%
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  trades Trade[]
+  claims Claim[]
+}
+
+model Trade {
+  id        String @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  itemNo    Int    // 1..47, matches source workbook trade numbering
+  name      String
+  sortOrder Int
+  // Marks the "Variations & Provisional Sum Adjustments" trade — its total
+  // feeds "Plus Approved Variations" on the claim cover rather than being
+  // counted as original scope.
+  isVariations Boolean @default(false)
+
+  lineItems LineItem[]
+
+  @@unique([projectId, itemNo])
+  @@index([projectId])
+}
+
+model LineItem {
+  id      String @id @default(cuid())
+  tradeId String
+  trade   Trade  @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  itemNo          String // e.g. "1.01" — string, source workbook uses decimal-like numbering
+  description     String
+  contractSumCents BigInt @default(0)
+  // Group header rows (e.g. "BUILDING A") carry a description but no figures.
+  isHeader        Boolean @default(false)
+  sortOrder       Int
+
+  claimLines ClaimLine[]
+
+  @@index([tradeId])
+}
+
+enum ClaimStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+}
+
+model Claim {
+  id            String      @id @default(cuid())
+  projectId     String
+  project       Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  claimNumber   Int
+  periodEndDate DateTime
+  status        ClaimStatus @default(DRAFT)
+
+  // Retention is manually confirmed each claim (auto-suggested, editable —
+  // mirrors the source workbook's "Manual Input, reached retention cap" note).
+  retentionHeldCents         BigInt  @default(0)
+  // Carried forward automatically from the prior APPROVED claim at creation time.
+  previousRetentionHeldCents BigInt  @default(0)
+  retentionManualOverride    Boolean @default(false)
+  retentionNote              String?
+
+  submittedAt DateTime?
+  approvedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  claimLines ClaimLine[]
+
+  @@unique([projectId, claimNumber])
+  @@index([projectId])
+}
+
+model ClaimLine {
+  id      String @id @default(cuid())
+  claimId String
+  claim   Claim  @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  lineItemId String
+  lineItem   LineItem @relation(fields: [lineItemId], references: [id], onDelete: Cascade)
+
+  // This claim, cumulative % complete (basis points, 0-1,000,000 = 0-100.0000%)
+  percentCompleteBps Int @default(0)
+
+  // Carried forward automatically from the prior APPROVED claim at creation time.
+  previousPercentBps Int    @default(0)
+  previousClaimCents BigInt @default(0)
+
+  // Set only once the client/superintendent certifies this claim (may differ
+  // from what was claimed). Null until certified.
+  certifiedThisClaimCents BigInt?
+
+  @@unique([claimId, lineItemId])
+  @@index([claimId])
+}
