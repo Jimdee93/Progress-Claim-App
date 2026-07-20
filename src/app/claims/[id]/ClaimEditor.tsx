@@ -134,22 +134,32 @@ export default function ClaimEditor({ initial }: { initial: ClaimContextDTO }) {
             · <StatusBadge status={initial.claim.status} />
           </p>
         </div>
-        {initial.claim.status === "SUBMITTED" && (
-          <Link
-            href={`/claims/${initial.claim.id}/certify`}
-            className="bg-slate-900 text-white rounded px-4 py-2 text-sm font-medium"
-          >
-            Certify claim
-          </Link>
-        )}
-        {initial.claim.status === "APPROVED" && (
-          <a
-            href={`/api/claims/${initial.claim.id}/export`}
-            className="bg-slate-900 text-white rounded px-4 py-2 text-sm font-medium"
-          >
-            Export .xlsx
-          </a>
-        )}
+        <div className="flex gap-2">
+          {(initial.claim.status === "SUBMITTED" || initial.claim.status === "APPROVED") && (
+            <>
+              <a
+                href={`/api/claims/${initial.claim.id}/export`}
+                className="bg-white border border-slate-300 text-slate-700 rounded px-4 py-2 text-sm font-medium"
+              >
+                Export .xlsx
+              </a>
+              <a
+                href={`/api/claims/${initial.claim.id}/export/pdf`}
+                className="bg-white border border-slate-300 text-slate-700 rounded px-4 py-2 text-sm font-medium"
+              >
+                Export .pdf
+              </a>
+            </>
+          )}
+          {initial.claim.status === "SUBMITTED" && (
+            <Link
+              href={`/claims/${initial.claim.id}/certify`}
+              className="bg-slate-900 text-white rounded px-4 py-2 text-sm font-medium"
+            >
+              Certify claim
+            </Link>
+          )}
+        </div>
       </div>
 
       {error && (
