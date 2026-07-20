@@ -22,6 +22,9 @@ export default function CertifyEditor({ initial }: { initial: ClaimContextDTO })
   const [retentionNote, setRetentionNote] = useState(initial.claim.retentionNote ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [parsing, setParsing] = useState(false);
+  const [uploadSummary, setUploadSummary] = useState<{ matchedCount: number; warnings: string[] } | null>(null);
+  const [approved, setApproved] = useState(false);
 
   const totals = useMemo(() => {
     let claimedCents = 0;
@@ -45,6 +48,42 @@ export default function CertifyEditor({ initial }: { initial: ClaimContextDTO })
       }
     }
     setCertified(map);
+    setApproved(false);
+  }
+
+  function updateCertifiedLine(lineItemId: string, value: string) {
+    setCertified((prev) => ({ ...prev, [lineItemId]: value }));
+    setApproved(false);
+  }
+
+  async function handleUploadCertified(file: File) {
+    setParsing(true);
+    setError(null);
+    setUploadSummary(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`/api/claims/${initial.claim.id}/certify/parse`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to parse certified workbook");
+
+      setCertified((prev) => {
+        const next = { ...prev };
+        for (const m of data.matches as { lineItemId: string; certifiedThisClaimCents: number }[]) {
+          next[m.lineItemId] = (m.certifiedThisClaimCents / 100).toFixed(2);
+        }
+        return next;
+      });
+      setUploadSummary({ matchedCount: data.matchedCount, warnings: data.warnings });
+      setApproved(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to parse certified workbook");
+    } finally {
+      setParsing(false);
+    }
   }
 
   async function handleCertify() {
@@ -82,14 +121,48 @@ export default function CertifyEditor({ initial }: { initial: ClaimContextDTO })
       </Link>
       <h1 className="text-2xl font-semibold mt-1 mb-1">Certify Claim No.{initial.claim.claimNumber}</h1>
       <p className="text-slate-600 text-sm mb-6">
-        Re-key the superintendent&apos;s certified figures against each line. Defaults to what was
-        claimed — adjust anywhere the certificate differs. Certifying locks this claim and becomes
-        next claim&apos;s starting baseline.
+        Upload the certified workbook the superintendent returned (same file, their % complete per
+        line) to fill in the certified figures automatically — check them below, then tick the
+        approval box to confirm. Certifying locks this claim and becomes next claim&apos;s starting
+        baseline.
       </p>
 
       {error && (
         <p className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p>
       )}
+
+      <div className="bg-white border border-slate-200 rounded-lg p-4 mb-4 text-sm">
+        <label className="block font-medium text-slate-700 mb-2">Upload certified workbook</label>
+        <div className="flex items-center gap-3">
+          <input
+            type="file"
+            accept=".xlsx"
+            disabled={parsing}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleUploadCertified(file);
+              e.target.value = "";
+            }}
+            className="block text-sm border border-slate-300 rounded p-2 flex-1"
+          />
+          {parsing && <span className="text-slate-500">Parsing…</span>}
+        </div>
+        {uploadSummary && (
+          <div className="mt-3 text-sm">
+            <p className="text-green-700">
+              Matched {uploadSummary.matchedCount} line item{uploadSummary.matchedCount === 1 ? "" : "s"} —
+              certified figures below have been filled in. Review before approving.
+            </p>
+            {uploadSummary.warnings.length > 0 && (
+              <ul className="list-disc list-inside text-amber-700 mt-1">
+                {uploadSummary.warnings.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="bg-white border border-slate-200 rounded-lg p-4 mb-4 flex items-center justify-between text-sm">
         <div className="flex gap-8">
@@ -155,7 +228,7 @@ export default function CertifyEditor({ initial }: { initial: ClaimContextDTO })
                           type="number"
                           step="0.01"
                           value={certified[li.id] ?? "0"}
-                          onChange={(e) => setCertified((prev) => ({ ...prev, [li.id]: e.target.value }))}
+                          onChange={(e) => updateCertifiedLine(li.id, e.target.value)}
                           className="w-28 rounded border border-slate-300 px-2 py-1 text-right"
                         />
                       </td>
@@ -176,7 +249,10 @@ export default function CertifyEditor({ initial }: { initial: ClaimContextDTO })
               type="number"
               step="0.01"
               value={retentionHeld}
-              onChange={(e) => setRetentionHeld(e.target.value)}
+              onChange={(e) => {
+                setRetentionHeld(e.target.value);
+                setApproved(false);
+              }}
               className="w-40 rounded border border-slate-300 px-2 py-1"
             />
           </label>
@@ -202,9 +278,21 @@ export default function CertifyEditor({ initial }: { initial: ClaimContextDTO })
         </div>
       </div>
 
+      <div className="flex items-center gap-2 mb-4 text-sm">
+        <input
+          id="finalApproval"
+          type="checkbox"
+          checked={approved}
+          onChange={(e) => setApproved(e.target.checked)}
+        />
+        <label htmlFor="finalApproval">
+          I&apos;ve reviewed the certified figures and retention above and approve them.
+        </label>
+      </div>
+
       <button
         onClick={handleCertify}
-        disabled={saving}
+        disabled={saving || !approved}
         className="bg-slate-900 text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
       >
         {saving ? "Certifying…" : "Certify & approve claim"}
