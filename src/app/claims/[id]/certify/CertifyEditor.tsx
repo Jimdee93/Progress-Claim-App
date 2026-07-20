@@ -106,7 +106,7 @@ export default function CertifyEditor({ initial }: { initial: ClaimContextDTO })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to certify");
-      window.location.href = "/";
+      window.location.href = `/projects/${initial.project.id}`;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to certify");
     } finally {

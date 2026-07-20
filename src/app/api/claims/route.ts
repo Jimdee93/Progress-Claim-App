@@ -12,8 +12,11 @@ export async function POST(req: NextRequest) {
   if (!periodEndDate || Number.isNaN(periodEndDate.getTime())) {
     return NextResponse.json({ error: "Invalid periodEndDate" }, { status: 400 });
   }
+  if (typeof body.projectId !== "string") {
+    return NextResponse.json({ error: "projectId is required" }, { status: 400 });
+  }
 
-  const project = await prisma.project.findFirst();
+  const project = await prisma.project.findUnique({ where: { id: body.projectId } });
   if (!project) return NextResponse.json({ error: "No project found" }, { status: 404 });
 
   try {

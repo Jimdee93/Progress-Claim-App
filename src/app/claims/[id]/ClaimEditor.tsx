@@ -118,8 +118,8 @@ export default function ClaimEditor({ initial }: { initial: ClaimContextDTO }) {
     <div className="max-w-6xl mx-auto p-8">
       <div className="flex items-start justify-between mb-6">
         <div>
-          <Link href="/" className="text-sm text-slate-500 underline">
-            &larr; Dashboard
+          <Link href={`/projects/${initial.project.id}`} className="text-sm text-slate-500 underline">
+            &larr; {initial.project.name}
           </Link>
           <h1 className="text-2xl font-semibold mt-1">
             {initial.project.name} — Claim No.{initial.claim.claimNumber}

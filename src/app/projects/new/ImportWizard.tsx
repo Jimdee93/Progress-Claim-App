@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 interface Preview {
   projectName: string;
@@ -57,7 +58,7 @@ export default function ImportWizard() {
       const res = await fetch("/api/import/confirm", { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Import failed");
-      window.location.href = "/";
+      window.location.href = `/projects/${data.projectId}`;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Import failed");
     } finally {
@@ -67,7 +68,10 @@ export default function ImportWizard() {
 
   return (
     <div className="max-w-2xl mx-auto p-8">
-      <h1 className="text-2xl font-semibold mb-1">Import head contract workbook</h1>
+      <Link href="/" className="text-sm text-slate-500 underline">
+        &larr; Projects
+      </Link>
+      <h1 className="text-2xl font-semibold mt-1 mb-1">New project — import head contract workbook</h1>
       <p className="text-slate-600 mb-6">
         Upload the progress claim workbook to set up the project — trades, line items, contract
         sums, and this claim&apos;s certified figures as the starting baseline.

@@ -27,13 +27,13 @@ npm run db:seed        # creates the single login user from ADMIN_EMAIL/ADMIN_PA
 npm run dev
 ```
 
-Then sign in at `http://localhost:3000` and import a progress claim workbook
-from `/import` to set up the project.
+Then sign in at `http://localhost:3000` — you'll land on the projects list.
+Click "New project" to import a progress claim workbook and set one up.
 
 ## Data model
 
-- **Project** — one per deployment (single-project scope). Holds the pinned
-  original contract value, retention rate/cap, and GST rate.
+- **Project** — one head contract (the app supports many, listed at `/`).
+  Holds the pinned original contract value, retention rate/cap, and GST rate.
 - **Trade** — a work element (matches the imported workbook's trade tabs,
   e.g. "Concrete Elements"). The "Variations & Provisional Sum Adjustments"
   trade is flagged `isVariations` and feeds "Plus Approved Variations" on

@@ -1,15 +1,17 @@
-import { redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import SettingsForm from "./SettingsForm";
 
 export const dynamic = "force-dynamic";
 
-export default async function SettingsPage() {
-  const project = await prisma.project.findFirst();
-  if (!project) redirect("/import");
+export default async function SettingsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const project = await prisma.project.findUnique({ where: { id } });
+  if (!project) notFound();
 
   return (
     <SettingsForm
+      projectId={project.id}
       name={project.name}
       originalContractValueCents={Number(project.originalContractValueCents)}
       retentionRateBps={project.retentionRateBps}

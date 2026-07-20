@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 
 interface Props {
+  projectId: string;
   name: string;
   originalContractValueCents: number;
   retentionRateBps: number;
@@ -26,7 +27,7 @@ export default function SettingsForm(props: Props) {
     setError(null);
     setSaved(false);
     try {
-      const res = await fetch("/api/project", {
+      const res = await fetch(`/api/projects/${props.projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -49,8 +50,8 @@ export default function SettingsForm(props: Props) {
 
   return (
     <div className="max-w-xl mx-auto p-8">
-      <Link href="/" className="text-sm text-slate-500 underline">
-        &larr; Dashboard
+      <Link href={`/projects/${props.projectId}`} className="text-sm text-slate-500 underline">
+        &larr; Project
       </Link>
       <h1 className="text-2xl font-semibold mt-1 mb-6">Project settings</h1>
 

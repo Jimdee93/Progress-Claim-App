@@ -1,111 +1,95 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { auth, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { formatCents } from "@/lib/money";
-import NewClaimForm from "./dashboard/NewClaimForm";
 
-// Always reflects live DB state (claims, contract value) — never prerender
-// this at build time.
+// Always reflects live DB state — never prerender this at build time.
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
+export default async function ProjectsPage() {
   const session = await auth();
 
-  const project = await prisma.project.findFirst({
+  const projects = await prisma.project.findMany({
+    orderBy: { createdAt: "desc" },
     include: {
-      claims: { orderBy: { claimNumber: "desc" } },
+      claims: { orderBy: { claimNumber: "desc" }, take: 1 },
+      trades: { where: { isVariations: true }, include: { lineItems: true } },
     },
   });
-
-  if (!project) redirect("/import");
-
-  const latestClaim = project.claims[0] ?? null;
-  const approvedVariations = await prisma.trade.findMany({
-    where: { projectId: project.id, isVariations: true },
-    include: { lineItems: true },
-  });
-  const variationsTotalCents = approvedVariations
-    .flatMap((t) => t.lineItems)
-    .reduce((sum, li) => sum + li.contractSumCents, 0n);
-  const totalContractValueCents = project.originalContractValueCents + variationsTotalCents;
 
   return (
     <div className="max-w-4xl mx-auto p-8">
       <div className="flex items-start justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-semibold">{project.name}</h1>
-          <p className="text-slate-600 mt-1">
-            Total contract value: {formatCents(totalContractValueCents)}
-          </p>
-        </div>
+        <h1 className="text-2xl font-semibold">Projects</h1>
         <div className="text-right text-sm">
           <p className="text-slate-500">{session?.user?.email}</p>
-          <div className="flex gap-3 mt-1 justify-end">
-            <Link href="/settings" className="underline text-slate-500">
-              Settings
-            </Link>
-            <form
-              action={async () => {
-                "use server";
-                await signOut({ redirectTo: "/login" });
-              }}
-            >
-              <button className="underline text-slate-500" type="submit">
-                Sign out
-              </button>
-            </form>
-          </div>
+          <form
+            action={async () => {
+              "use server";
+              await signOut({ redirectTo: "/login" });
+            }}
+          >
+            <button className="underline text-slate-500 mt-1" type="submit">
+              Sign out
+            </button>
+          </form>
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-lg p-6 mb-8">
-        <h2 className="text-sm font-medium text-slate-700 mb-3">Start next claim</h2>
-        {latestClaim ? (
-          <NewClaimForm
-            latestPeriodEndDate={latestClaim.periodEndDate.toISOString()}
-            disabled={latestClaim.status !== "APPROVED"}
-            disabledReason={
-              latestClaim.status !== "APPROVED"
-                ? `Claim No.${latestClaim.claimNumber} must be certified before starting the next claim.`
-                : undefined
-            }
-          />
-        ) : (
-          <p className="text-sm text-slate-500">No claims yet.</p>
-        )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {projects.map((project) => {
+          const variationsTotalCents = project.trades
+            .flatMap((t) => t.lineItems)
+            .reduce((sum, li) => sum + li.contractSumCents, 0n);
+          const totalContractValueCents = project.originalContractValueCents + variationsTotalCents;
+          const latestClaim = project.claims[0] ?? null;
+
+          return (
+            <Link
+              key={project.id}
+              href={`/projects/${project.id}`}
+              className="bg-white border border-slate-200 rounded-lg p-5 hover:border-slate-400 transition-colors"
+            >
+              <h2 className="font-semibold text-slate-900">{project.name}</h2>
+              <p className="text-sm text-slate-600 mt-1">{formatCents(totalContractValueCents)}</p>
+              <div className="mt-3 text-sm text-slate-500">
+                {latestClaim ? (
+                  <span>
+                    Claim No.{latestClaim.claimNumber} —{" "}
+                    <StatusBadge status={latestClaim.status} />
+                  </span>
+                ) : (
+                  <span>No claims yet</span>
+                )}
+              </div>
+            </Link>
+          );
+        })}
+
+        <Link
+          href="/projects/new"
+          className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-300 rounded-lg p-5 text-slate-500 hover:border-slate-400 hover:text-slate-700 transition-colors min-h-[120px]"
+        >
+          <span className="text-2xl leading-none">+</span>
+          <span className="text-sm font-medium">New project</span>
+        </Link>
       </div>
 
-      <h2 className="text-sm font-medium text-slate-700 mb-3">Claims</h2>
-      <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">
-        {project.claims.map((claim) => (
-          <Link
-            key={claim.id}
-            href={claim.status === "SUBMITTED" ? `/claims/${claim.id}/certify` : `/claims/${claim.id}`}
-            className="flex items-center justify-between px-4 py-3 hover:bg-slate-50"
-          >
-            <div>
-              <span className="font-medium">Claim No.{claim.claimNumber}</span>
-              <span className="text-slate-500 ml-2 text-sm">
-                {new Date(claim.periodEndDate).toLocaleDateString("en-AU", { year: "numeric", month: "long" })}
-              </span>
-            </div>
-            <StatusBadge status={claim.status} />
-          </Link>
-        ))}
-        {project.claims.length === 0 && <p className="px-4 py-6 text-sm text-slate-500">No claims yet.</p>}
-      </div>
+      {projects.length === 0 && (
+        <p className="text-sm text-slate-500 mt-4">
+          No projects yet — click &quot;New project&quot; to import a progress claim workbook and
+          get started.
+        </p>
+      )}
     </div>
   );
 }
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    DRAFT: "bg-slate-100 text-slate-600",
-    SUBMITTED: "bg-amber-100 text-amber-700",
-    APPROVED: "bg-green-100 text-green-700",
+    DRAFT: "text-slate-600",
+    SUBMITTED: "text-amber-700",
+    APPROVED: "text-green-700",
   };
-  return (
-    <span className={`text-xs font-medium px-2 py-1 rounded ${styles[status] ?? ""}`}>{status}</span>
-  );
+  return <span className={`font-medium ${styles[status] ?? ""}`}>{status}</span>;
 }

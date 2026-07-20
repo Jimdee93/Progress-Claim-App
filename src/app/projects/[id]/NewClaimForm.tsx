@@ -8,10 +8,12 @@ function nextMonthEnd(from: Date): string {
 }
 
 export default function NewClaimForm({
+  projectId,
   latestPeriodEndDate,
   disabled,
   disabledReason,
 }: {
+  projectId: string;
   latestPeriodEndDate: string;
   disabled: boolean;
   disabledReason?: string;
@@ -27,7 +29,7 @@ export default function NewClaimForm({
       const res = await fetch("/api/claims", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ periodEndDate }),
+        body: JSON.stringify({ projectId, periodEndDate }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to create claim");

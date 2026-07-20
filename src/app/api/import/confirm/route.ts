@@ -2,17 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { parseHeadContractWorkbook } from "@/lib/import-xlsx";
 import { importParsedWorkbook } from "@/lib/import-db";
-import { prisma } from "@/lib/prisma";
 import { centsFromDollarInput, percentNumberToBps } from "@/lib/money";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const existing = await prisma.project.count();
-  if (existing > 0) {
-    return NextResponse.json({ error: "A project already exists." }, { status: 409 });
-  }
 
   const formData = await req.formData();
   const file = formData.get("file");
