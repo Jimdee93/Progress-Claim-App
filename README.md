@@ -1,4 +1,4 @@
-# Advantage — Head Contract Progress Claims
+# Progress Claim App — Head Contract Progress Claims
 
 A web app for tracking monthly head contract progress claims on a commercial
 construction project. Import an existing progress claim workbook once, then
@@ -69,7 +69,7 @@ npm install
 npm run dist:win
 ```
 
-The installer lands in `dist-electron/` (e.g. `Advantage Setup 0.1.0.exe`).
+The installer lands in `dist-electron/` (e.g. `Progress Claim App Setup 0.1.0.exe`).
 Run it to install; a Start Menu / desktop shortcut is created using the
 icon in `build/icon.ico`.
 
@@ -81,13 +81,14 @@ Email: admin@local
 Password: <randomly generated>
 ```
 
-This is saved to `%APPDATA%\Advantage\desktop-config.json` on your machine
-only — write the password down when you see it, since there's no "forgot
-password" flow yet. Delete that file and relaunch the app to regenerate a
-fresh login (this does **not** touch your claims data).
+This is saved to `%APPDATA%\Progress Claim App\desktop-config.json` on your
+machine only — write the password down when you see it, since there's no
+"forgot password" flow yet. Delete that file and relaunch the app to
+regenerate a fresh login (this does **not** touch your claims data).
 
-**Data location**: `%APPDATA%\Advantage\advantage.db` — a normal SQLite
-file. Back it up like any other file; there's no server involved.
+**Data location**: `%APPDATA%\Progress Claim App\progress-claims.db` — a
+normal SQLite file. Back it up like any other file; there's no server
+involved.
 
 **How it works** (`electron/main.cjs`, `electron/server.cjs`): on launch,
 the app runs `prisma migrate deploy` and seeds the admin user against that

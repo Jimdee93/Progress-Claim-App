@@ -85,7 +85,7 @@ async function bootstrap() {
 
   const userDataDir = app.getPath("userData");
   fs.mkdirSync(userDataDir, { recursive: true });
-  const dbPath = path.join(userDataDir, "advantage.db");
+  const dbPath = path.join(userDataDir, "progress-claims.db");
 
   const creds = ensureDesktopCredentials(userDataDir);
 
@@ -108,7 +108,7 @@ async function bootstrap() {
   if (creds.isFirstRun) {
     dialog.showMessageBoxSync({
       type: "info",
-      title: "Advantage — first-time setup",
+      title: "Progress Claim App — first-time setup",
       message: "Your local login has been created.",
       detail:
         `Email: ${creds.ADMIN_EMAIL}\n` +
@@ -125,6 +125,7 @@ function createWindow(port) {
   mainWindow = new BrowserWindow({
     width: 1360,
     height: 900,
+    title: "Progress Claim App",
     icon: path.join(__dirname, "..", "build", "icon.png"),
     autoHideMenuBar: true,
   });
@@ -143,7 +144,7 @@ function killServer() {
 
 app.whenReady().then(() => {
   bootstrap().catch((err) => {
-    dialog.showErrorBox("Advantage failed to start", String((err && err.stack) || err));
+    dialog.showErrorBox("Progress Claim App failed to start", String((err && err.stack) || err));
     app.quit();
   });
 });
