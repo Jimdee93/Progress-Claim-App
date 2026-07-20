@@ -12,10 +12,6 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // Plain CommonJS Node scripts (Electron main process convention) —
-    // not part of the Next.js app's TypeScript/ESM code.
-    "electron/**",
-    "dist-electron/**",
   ]),
 ]);
 

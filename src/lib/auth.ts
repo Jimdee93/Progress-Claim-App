@@ -6,10 +6,9 @@ import { prisma } from "@/lib/prisma";
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
-  // This app is never deployed behind one fixed public domain — local dev,
-  // an internal deployment, or the desktop build's embedded localhost
-  // server on a variable port. There's no untrusted-origin risk to guard
-  // against here since it's not multi-tenant.
+  // This app isn't deployed behind one fixed public domain (local dev,
+  // preview URLs, an internal deployment). There's no untrusted-origin risk
+  // to guard against here since it's not multi-tenant.
   trustHost: true,
   providers: [
     Credentials({

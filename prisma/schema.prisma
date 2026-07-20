@@ -2,17 +2,12 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider      = "prisma-client"
-  output        = "../src/generated/prisma"
-  // "native" covers whatever OS runs `prisma generate` (this sandbox's
-  // Linux dev environment); "windows" is added explicitly so the desktop
-  // build works even if `prisma generate` is ever re-run on a non-Windows
-  // machine (WSL, Mac, CI) while still targeting a Windows package.
-  binaryTargets = ["native", "windows"]
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
