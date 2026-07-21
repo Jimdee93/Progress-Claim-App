@@ -85,10 +85,106 @@ function parseDateText(text: string | undefined, warnings: string[]): Date {
 
 function findHeaderRow(sheet: XLSX.WorkSheet, range: XLSX.Range): number | null {
   for (let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 15); r++) {
-    const b = cellValue(sheet, XLSX.utils.encode_cell({ r, c: 1 }));
-    if (typeof b === "string" && /description of works/i.test(b)) return r;
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const text = cellValue(sheet, XLSX.utils.encode_cell({ r, c }));
+      if (typeof text === "string" && /description of works/i.test(text)) return r;
+    }
   }
   return null;
+}
+
+// Scans the top block of a sheet (title/claim-number/date lines above the
+// table) for a cell matching `pattern`, reading left-to-right, top-to-bottom
+// across every column — the label's row/column varies between templates
+// (e.g. project name sits at B3 in one workbook, D3 in another).
+function findTextMatching(
+  sheet: XLSX.WorkSheet,
+  range: XLSX.Range,
+  pattern: RegExp,
+  maxRows = 15
+): string | undefined {
+  for (let r = range.s.r; r <= Math.min(range.e.r, range.s.r + maxRows); r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const text = asString(cellValue(sheet, XLSX.utils.encode_cell({ r, c })));
+      if (text && pattern.test(text)) return text;
+    }
+  }
+  return undefined;
+}
+
+const HEADER_BOILERPLATE_PATTERNS = [
+  /progress claim no/i,
+  /^claim summary$/i,
+  /payment claim under/i,
+  /works completed/i,
+  /claim submission date/i,
+];
+
+// The project name is whatever non-boilerplate text sits above the trade
+// table — its exact row/column isn't consistent across templates, so this
+// takes the first text cell in the top block that isn't one of the known
+// fixed labels.
+function findProjectName(sheet: XLSX.WorkSheet, range: XLSX.Range, maxRows = 15): string | undefined {
+  for (let r = range.s.r; r <= Math.min(range.e.r, range.s.r + maxRows); r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const text = asString(cellValue(sheet, XLSX.utils.encode_cell({ r, c })));
+      if (text && !HEADER_BOILERPLATE_PATTERNS.some((p) => p.test(text))) return text;
+    }
+  }
+  return undefined;
+}
+
+interface SummaryColumnMap {
+  itemNo: number;
+  name: number;
+  contractSum: number;
+  percentComplete: number;
+  previouslyClaimed: number;
+  previousPercent?: number;
+}
+
+// The Claim Summary sheet's header row (and which columns it has) varies
+// between templates — some mirror the trade sheets with separate "PREVIOUS %
+// COMPLETE" / "PREVIOUSLY CLAIMED" columns, others only have "PREVIOUSLY
+// CLAIMED" and derive the % from it. Detect both the row and the columns
+// from their labels rather than assuming fixed positions.
+function findSummaryHeaderRow(sheet: XLSX.WorkSheet, range: XLSX.Range): number | null {
+  for (let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 20); r++) {
+    let hasItem = false;
+    let hasTrade = false;
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const text = asString(cellValue(sheet, XLSX.utils.encode_cell({ r, c })));
+      if (!text) continue;
+      const norm = text.toLowerCase().trim();
+      if (norm === "item") hasItem = true;
+      if (norm.startsWith("trade") || norm.includes("work element")) hasTrade = true;
+    }
+    if (hasItem && hasTrade) return r;
+  }
+  return null;
+}
+
+function buildSummaryColumnMap(sheet: XLSX.WorkSheet, headerRow: number, lastCol: number): Partial<SummaryColumnMap> {
+  const map: Partial<SummaryColumnMap> = {};
+  let sawFirstPercent = false;
+
+  for (let c = 0; c <= lastCol; c++) {
+    const text = asString(cellValue(sheet, XLSX.utils.encode_cell({ r: headerRow, c })));
+    if (!text) continue;
+    const norm = text.toLowerCase().replace(/\s+/g, " ").trim();
+
+    if (norm === "item" || norm === "#") map.itemNo = c;
+    else if (norm.startsWith("trade") || norm.includes("work element")) map.name = c;
+    else if (norm === "contract sum") map.contractSum = c;
+    else if (norm.includes("previous") && norm.includes("%")) map.previousPercent = c;
+    else if (norm.includes("previous") && norm.includes("claim")) map.previouslyClaimed = c;
+    else if (norm === "% complete" && !sawFirstPercent) {
+      map.percentComplete = c;
+      sawFirstPercent = true;
+    }
+  }
+
+  return map;
 }
 
 interface TradeColumnMap {
@@ -200,37 +296,71 @@ export function parseHeadContractWorkbook(buffer: ArrayBuffer): ParsedWorkbook {
     throw new Error('This workbook has no "Claim Summary" sheet — is it a head contract progress claim?');
   }
 
-  const projectName = asString(cellValue(summary, "B3")) ?? "Imported Project";
-  const claimNumber = parseClaimNumber(asString(cellValue(summary, "B4")), warnings);
-  const periodEndDate = parseDateText(asString(cellValue(summary, "B6")), warnings);
-
   const summaryRange = XLSX.utils.decode_range(summary["!ref"] ?? "A1:A1");
+
+  const projectName = findProjectName(summary, summaryRange) ?? "Imported Project";
+  const claimNumber = parseClaimNumber(findTextMatching(summary, summaryRange, /progress claim no/i), warnings);
+  const periodEndDate = parseDateText(
+    findTextMatching(summary, summaryRange, /works completed/i),
+    warnings
+  );
+
+  const headerRow = findSummaryHeaderRow(summary, summaryRange);
+  if (headerRow === null) {
+    throw new Error(
+      'Couldn\'t find the trade table header on "Claim Summary" (looking for "ITEM" and "TRADE / WORK ELEMENTS" columns).'
+    );
+  }
+  const summaryCols = buildSummaryColumnMap(summary, headerRow, summaryRange.e.c);
+  if (
+    summaryCols.itemNo === undefined ||
+    summaryCols.name === undefined ||
+    summaryCols.contractSum === undefined ||
+    summaryCols.percentComplete === undefined ||
+    summaryCols.previouslyClaimed === undefined
+  ) {
+    throw new Error(
+      'Couldn\'t identify all expected columns on "Claim Summary" (need ITEM, TRADE / WORK ELEMENTS, CONTRACT SUM, % COMPLETE, and PREVIOUSLY CLAIMED).'
+    );
+  }
+  const sCols = summaryCols as SummaryColumnMap;
+
   const trades: ParsedTrade[] = [];
   let tradeSortOrder = 0;
 
-  for (let r = 8; r <= summaryRange.e.r; r++) {
+  for (let r = headerRow + 1; r <= summaryRange.e.r; r++) {
     const row = (c: number) => cellValue(summary, XLSX.utils.encode_cell({ r, c }));
-    const itemNo = asNumber(row(0)); // A
+    const itemNo = asNumber(row(sCols.itemNo));
     if (itemNo === undefined || !Number.isInteger(itemNo)) continue;
 
-    const name = asString(row(1)) ?? `Trade ${itemNo}`; // B
+    const name = asString(row(sCols.name)) ?? `Trade ${itemNo}`;
     const isVariations = /variation/i.test(name);
 
-    const sheetName = workbook.SheetNames.find((n) => n.startsWith(`${itemNo}_`)) ?? null;
+    // Sheet names aren't always zero-padded consistently with the item
+    // number (e.g. "01_Concrete" for item 1 but "9_Masonry" for item 9), so
+    // match on the sheet name's own leading number rather than the exact
+    // "<itemNo>_" string prefix.
+    const sheetName =
+      workbook.SheetNames.find((n) => {
+        const m = n.match(/^(\d+)_/);
+        return m !== null && Number(m[1]) === itemNo;
+      }) ?? null;
 
     let lineItems: ParsedLineItem[];
     if (sheetName) {
       lineItems = parseTradeSheet(workbook.Sheets[sheetName], warnings, sheetName);
     } else {
       // No dedicated sheet (e.g. "Overheads & Profit") — take the summary
-      // row's own figures as a single line item. Claim Summary columns:
-      // C=CONTRACT SUM D=%COMPLETE E=CLAIMED TO DATE F=PREVIOUSLY CLAIMED
-      // G=THIS CLAIM(delta) H=COST TO COMPLETE — there's no dedicated
-      // "previous %" column here, so it's derived from previouslyClaimed/contractSum.
-      const contractSum = asNumber(row(2)) ?? 0; // C
-      const d = asNumber(row(3)) ?? 0; // D
-      const previouslyClaimed = asNumber(row(5)) ?? 0; // F
-      const previousPercent = contractSum ? previouslyClaimed / contractSum : 0;
+      // row's own figures as a single line item.
+      const contractSum = asNumber(row(sCols.contractSum)) ?? 0;
+      const d = asNumber(row(sCols.percentComplete)) ?? 0;
+      const previouslyClaimed = asNumber(row(sCols.previouslyClaimed)) ?? 0;
+      const previousPercent =
+        sCols.previousPercent !== undefined
+          ? asNumber(row(sCols.previousPercent)) ?? 0
+          : contractSum
+            ? previouslyClaimed / contractSum
+            : 0;
       lineItems = [
         {
           itemNo: `${itemNo}.01`,
@@ -257,7 +387,7 @@ export function parseHeadContractWorkbook(buffer: ArrayBuffer): ParsedWorkbook {
   }
 
   if (trades.length === 0) {
-    throw new Error('No trade rows found on "Claim Summary" (expected numbered rows from row 9).');
+    throw new Error('No trade rows found on "Claim Summary" below its header row.');
   }
 
   const suggestedOriginalContractValueCents = trades
