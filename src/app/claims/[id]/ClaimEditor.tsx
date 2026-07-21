@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { ClaimContextDTO } from "@/lib/claim-context";
@@ -159,7 +159,8 @@ export default function ClaimEditor({ initial }: { initial: ClaimContextDTO }) {
 
   async function addLineItem(
     tradeId: string,
-    body: { description: string; contractSumCents: number; isHeader: boolean }
+    body: { description: string; contractSumCents: number; isHeader: boolean },
+    insertAfterLineItemId?: string
   ) {
     setLineItemBusyId(tradeId);
     setError(null);
@@ -167,7 +168,7 @@ export default function ClaimEditor({ initial }: { initial: ClaimContextDTO }) {
       const res = await fetch(`/api/claims/${initial.claim.id}/line-items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tradeId, ...body }),
+        body: JSON.stringify({ tradeId, ...body, insertAfterLineItemId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to add line item");
@@ -413,11 +414,32 @@ function TradeGroup({
   busyId: string | null;
   onLineItemEdit: (lineItemId: string, body: { description?: string; contractSumCents?: number; itemNo?: string }) => void;
   onLineItemDelete: (lineItemId: string) => void;
-  onLineItemAdd: (tradeId: string, body: { description: string; contractSumCents: number; isHeader: boolean }) => void;
+  onLineItemAdd: (
+    tradeId: string,
+    body: { description: string; contractSumCents: number; isHeader: boolean },
+    insertAfterLineItemId?: string
+  ) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [addingLine, setAddingLine] = useState(false);
+  // null = no add form open; "__end__" = appending after the last row;
+  // otherwise the lineItemId the new row is being inserted directly after.
+  const [addingAfter, setAddingAfter] = useState<string | null>(null);
   const lineResultById = new Map(lineResults.map((r) => [r.lineItemId, r]));
+
+  function renderAddRow(afterId: string) {
+    if (addingAfter !== afterId) return null;
+    return (
+      <AddLineRow
+        key={`add-${afterId}`}
+        busy={busyId === trade.id}
+        onCancel={() => setAddingAfter(null)}
+        onAdd={(body) => {
+          onLineItemAdd(trade.id, body, afterId === "__end__" ? undefined : afterId);
+          setAddingAfter(null);
+        }}
+      />
+    );
+  }
 
   return (
     <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
@@ -454,11 +476,77 @@ function TradeGroup({
         <tbody>
           {trade.lineItems.map((li) => {
             const busy = busyId === li.id;
+            const rowActions = !readOnly && (
+              <td className="px-4 py-1.5 text-right whitespace-nowrap">
+                <button
+                  onClick={() => setAddingAfter(li.id)}
+                  disabled={busy}
+                  className="text-slate-400 hover:text-slate-700 disabled:opacity-50 mr-2"
+                  title="Insert line below"
+                >
+                  +
+                </button>
+                {li.canDelete && (
+                  <button
+                    onClick={() => onLineItemDelete(li.id)}
+                    disabled={busy}
+                    className="text-slate-400 hover:text-red-600 disabled:opacity-50"
+                    title="Delete"
+                  >
+                    ✕
+                  </button>
+                )}
+              </td>
+            );
             if (li.isHeader) {
               return (
-                <tr key={li.id} className="border-t border-slate-100 bg-slate-50/50">
-                  <td className="px-4 py-1.5 text-slate-400">{li.itemNo}</td>
-                  <td className="px-4 py-1.5 font-medium text-slate-600" colSpan={6}>
+                <Fragment key={li.id}>
+                  <tr className="border-t border-slate-100 bg-slate-50/50">
+                    <td className="px-4 py-1.5 text-slate-400">
+                      {readOnly ? (
+                        li.itemNo
+                      ) : (
+                        <EditableText
+                          value={li.itemNo}
+                          disabled={busy}
+                          onCommit={(v) => onLineItemEdit(li.id, { itemNo: v })}
+                        />
+                      )}
+                    </td>
+                    <td className="px-4 py-1.5 font-medium text-slate-600" colSpan={6}>
+                      {readOnly ? (
+                        li.description
+                      ) : (
+                        <EditableText
+                          value={li.description}
+                          disabled={busy}
+                          onCommit={(v) => onLineItemEdit(li.id, { description: v })}
+                          className="font-medium text-slate-600"
+                        />
+                      )}
+                    </td>
+                    {rowActions}
+                  </tr>
+                  {renderAddRow(li.id)}
+                </Fragment>
+              );
+            }
+            const r = lineResultById.get(li.id);
+            return (
+              <Fragment key={li.id}>
+                <tr className="border-t border-slate-100">
+                  <td className="px-4 py-1.5 text-slate-400">
+                    {readOnly ? (
+                      li.itemNo
+                    ) : (
+                      <EditableText
+                        value={li.itemNo}
+                        disabled={busy}
+                        onCommit={(v) => onLineItemEdit(li.id, { itemNo: v })}
+                      />
+                    )}
+                  </td>
+                  <td className="px-4 py-1.5">
                     {readOnly ? (
                       li.description
                     ) : (
@@ -466,110 +554,57 @@ function TradeGroup({
                         value={li.description}
                         disabled={busy}
                         onCommit={(v) => onLineItemEdit(li.id, { description: v })}
-                        className="font-medium text-slate-600"
                       />
                     )}
                   </td>
-                  {!readOnly && (
-                    <td className="px-4 py-1.5 text-right">
-                      {li.canDelete && (
-                        <button
-                          onClick={() => onLineItemDelete(li.id)}
-                          disabled={busy}
-                          className="text-slate-400 hover:text-red-600 disabled:opacity-50"
-                          title="Delete"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </td>
-                  )}
-                </tr>
-              );
-            }
-            const r = lineResultById.get(li.id);
-            return (
-              <tr key={li.id} className="border-t border-slate-100">
-                <td className="px-4 py-1.5 text-slate-400">{li.itemNo}</td>
-                <td className="px-4 py-1.5">
-                  {readOnly ? (
-                    li.description
-                  ) : (
-                    <EditableText
-                      value={li.description}
-                      disabled={busy}
-                      onCommit={(v) => onLineItemEdit(li.id, { description: v })}
-                    />
-                  )}
-                </td>
-                <td className="px-4 py-1.5 text-right">
-                  {readOnly ? (
-                    formatCents(li.contractSumCents)
-                  ) : (
-                    <EditableAmount
-                      valueCents={li.contractSumCents}
-                      disabled={busy}
-                      onCommit={(cents) => onLineItemEdit(li.id, { contractSumCents: cents })}
-                    />
-                  )}
-                </td>
-                <td className="px-4 py-1.5 text-right text-slate-400">
-                  {bpsToPercentNumber(li.previousPercentBps).toFixed(2)}%
-                </td>
-                <td className="px-4 py-1.5 text-right">
-                  {readOnly ? (
-                    `${bpsToPercentNumber(r?.percentCompleteBps ?? li.percentCompleteBps).toFixed(2)}%`
-                  ) : (
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step="0.01"
-                      value={percentInputs[li.id] ?? "0"}
-                      onChange={(e) => onPercentChange(li.id, e.target.value)}
-                      className="w-20 rounded border border-slate-300 px-2 py-1 text-right"
-                    />
-                  )}
-                </td>
-                <td className="px-4 py-1.5 text-right">{formatCents(r?.claimToDateCents ?? 0n)}</td>
-                <td className="px-4 py-1.5 text-right font-medium">
-                  {formatCents(r?.thisClaimAmountCents ?? 0n, { signDisplay: "always" })}
-                </td>
-                <td className="px-4 py-1.5 text-right text-slate-500">
-                  {formatCents(r?.costToCompleteCents ?? 0n)}
-                </td>
-                {!readOnly && (
                   <td className="px-4 py-1.5 text-right">
-                    {li.canDelete && (
-                      <button
-                        onClick={() => onLineItemDelete(li.id)}
+                    {readOnly ? (
+                      formatCents(li.contractSumCents)
+                    ) : (
+                      <EditableAmount
+                        valueCents={li.contractSumCents}
                         disabled={busy}
-                        className="text-slate-400 hover:text-red-600 disabled:opacity-50"
-                        title="Delete"
-                      >
-                        ✕
-                      </button>
+                        onCommit={(cents) => onLineItemEdit(li.id, { contractSumCents: cents })}
+                      />
                     )}
                   </td>
-                )}
-              </tr>
+                  <td className="px-4 py-1.5 text-right text-slate-400">
+                    {bpsToPercentNumber(li.previousPercentBps).toFixed(2)}%
+                  </td>
+                  <td className="px-4 py-1.5 text-right">
+                    {readOnly ? (
+                      `${bpsToPercentNumber(r?.percentCompleteBps ?? li.percentCompleteBps).toFixed(2)}%`
+                    ) : (
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step="0.01"
+                        value={percentInputs[li.id] ?? "0"}
+                        onChange={(e) => onPercentChange(li.id, e.target.value)}
+                        className="w-20 rounded border border-slate-300 px-2 py-1 text-right"
+                      />
+                    )}
+                  </td>
+                  <td className="px-4 py-1.5 text-right">{formatCents(r?.claimToDateCents ?? 0n)}</td>
+                  <td className="px-4 py-1.5 text-right font-medium">
+                    {formatCents(r?.thisClaimAmountCents ?? 0n, { signDisplay: "always" })}
+                  </td>
+                  <td className="px-4 py-1.5 text-right text-slate-500">
+                    {formatCents(r?.costToCompleteCents ?? 0n)}
+                  </td>
+                  {rowActions}
+                </tr>
+                {renderAddRow(li.id)}
+              </Fragment>
             );
           })}
-          {!readOnly && addingLine && (
-            <AddLineRow
-              busy={busyId === trade.id}
-              onCancel={() => setAddingLine(false)}
-              onAdd={(body) => {
-                onLineItemAdd(trade.id, body);
-                setAddingLine(false);
-              }}
-            />
-          )}
+          {!readOnly && renderAddRow("__end__")}
         </tbody>
       </table>
-      {!readOnly && !addingLine && (
+      {!readOnly && addingAfter === null && (
         <div className="px-4 py-2 border-t border-slate-100">
-          <button onClick={() => setAddingLine(true)} className="text-sm text-slate-600 underline">
+          <button onClick={() => setAddingAfter("__end__")} className="text-sm text-slate-600 underline">
             + Add line
           </button>
         </div>
