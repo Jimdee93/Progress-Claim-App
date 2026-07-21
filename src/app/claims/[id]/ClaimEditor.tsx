@@ -30,6 +30,7 @@ export default function ClaimEditor({ initial }: { initial: ClaimContextDTO }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [showSubmittedModal, setShowSubmittedModal] = useState(false);
 
   const computed = useMemo(() => {
     const tradeRollups = initial.trades.map((trade) => {
@@ -106,7 +107,8 @@ export default function ClaimEditor({ initial }: { initial: ClaimContextDTO }) {
       const res = await fetch(`/api/claims/${initial.claim.id}/submit`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to submit");
-      window.location.href = `/claims/${initial.claim.id}/certify`;
+      setShowSubmittedModal(true);
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit");
     } finally {
@@ -115,6 +117,7 @@ export default function ClaimEditor({ initial }: { initial: ClaimContextDTO }) {
   }
 
   return (
+    <>
     <div className="max-w-6xl mx-auto p-8">
       <div className="flex items-start justify-between mb-6">
         <div>
@@ -201,6 +204,45 @@ export default function ClaimEditor({ initial }: { initial: ClaimContextDTO }) {
         </div>
       )}
     </div>
+
+    {showSubmittedModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6">
+          <h2 className="text-lg font-semibold mb-1">Claim submitted</h2>
+          <p className="text-sm text-slate-600 mb-5">
+            Claim No.{initial.claim.claimNumber} has been submitted. Export a copy now, or continue to
+            certify.
+          </p>
+          <div className="flex flex-col gap-2">
+            <a
+              href={`/api/claims/${initial.claim.id}/export`}
+              className="bg-white border border-slate-300 text-slate-700 rounded px-4 py-2 text-sm font-medium text-center"
+            >
+              Export .xlsx
+            </a>
+            <a
+              href={`/api/claims/${initial.claim.id}/export/pdf`}
+              className="bg-white border border-slate-300 text-slate-700 rounded px-4 py-2 text-sm font-medium text-center"
+            >
+              Export .pdf
+            </a>
+            <Link
+              href={`/claims/${initial.claim.id}/certify`}
+              className="bg-slate-900 text-white rounded px-4 py-2 text-sm font-medium text-center"
+            >
+              Continue to certify
+            </Link>
+            <button
+              onClick={() => setShowSubmittedModal(false)}
+              className="text-sm text-slate-500 mt-1"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 
   function ClaimCoverPanel({ cover }: { cover: ReturnType<typeof calcClaimCover> }) {
