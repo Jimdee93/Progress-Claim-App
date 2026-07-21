@@ -14,9 +14,8 @@ function coverLine(
 ) {
   const y = doc.y;
   doc.font(opts?.bold ? "Helvetica-Bold" : "Helvetica").fontSize(10);
-  doc.text(label, PAGE_MARGIN, y, { continued: false, width: 320, height: 20 });
-  doc.text(value, PAGE_MARGIN + 320, y, { width: 150, align: "right", height: 20 });
-  doc.y = y;
+  doc.text(label, PAGE_MARGIN, y, { continued: false, width: 320 });
+  doc.text(value, PAGE_MARGIN + 320, y, { width: 150, align: "right" });
   doc.moveDown(opts?.gap ?? 0.5);
 }
 
@@ -215,7 +214,6 @@ function drawSummaryTable(doc: PDFKit.PDFDocument, ctx: ClaimContextDTO) {
   ];
 
   const tableLeft = PAGE_MARGIN;
-  const bottomLimit = doc.page.height - PAGE_MARGIN;
 
   function drawPageHeading() {
     doc.font("Helvetica-Bold").fontSize(12).text(`${ctx.project.name} - Claim Summary`, tableLeft);
@@ -223,7 +221,12 @@ function drawSummaryTable(doc: PDFKit.PDFDocument, ctx: ClaimContextDTO) {
     doc.moveDown(0.8);
   }
 
+  // Compute bottomLimit only after switching to the landscape page — doc.page
+  // still refers to the (portrait) cover page until addPage() below runs, so
+  // capturing it beforehand bakes in the wrong page height and lets rows
+  // drift past the real, shorter landscape bottom margin undetected.
   doc.addPage({ margin: PAGE_MARGIN, size: PAGE_SIZE, layout: "landscape" });
+  const bottomLimit = doc.page.height - PAGE_MARGIN;
   drawPageHeading();
 
   drawTable(doc, columns, ctx.trades, {
