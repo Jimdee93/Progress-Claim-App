@@ -16,6 +16,10 @@ export interface LineItemDTO {
   deltaPercentBps: number;
   thisClaimAmountCents: number;
   costToCompleteCents: number;
+  // True only when this line item was first added on the claim being
+  // viewed (no earlier claim has ever referenced it) — deleting it can't
+  // erase a past payment claim's figures.
+  canDelete: boolean;
 }
 
 export interface TradeDTO {
@@ -88,6 +92,16 @@ export async function getClaimContext(claimId: string): Promise<ClaimContextDTO 
   });
   if (!claim) return null;
 
+  // A line item is only safe to delete if no other claim (necessarily a
+  // past SUBMITTED/APPROVED one, since only one claim per project is ever
+  // DRAFT) has ever referenced it.
+  const claimLineCounts = await prisma.claimLine.groupBy({
+    by: ["lineItemId"],
+    where: { lineItemId: { in: claim.claimLines.map((cl) => cl.lineItemId) } },
+    _count: { _all: true },
+  });
+  const otherClaimCount = new Map(claimLineCounts.map((c) => [c.lineItemId, c._count._all]));
+
   const tradesMap = new Map<string, { trade: (typeof claim.claimLines)[number]["lineItem"]["trade"]; lines: typeof claim.claimLines }>();
   for (const cl of claim.claimLines) {
     const tradeId = cl.lineItem.tradeId;
@@ -105,7 +119,7 @@ export async function getClaimContext(claimId: string): Promise<ClaimContextDTO 
       const lineResults = sortedLines.map((cl) =>
         calcLineItem({
           lineItemId: cl.lineItemId,
-          contractSumCents: cl.lineItem.contractSumCents,
+          contractSumCents: cl.contractSumCents,
           percentCompleteBps: cl.percentCompleteBps,
           previousPercentBps: cl.previousPercentBps,
           previousClaimCents: cl.previousClaimCents,
@@ -114,7 +128,7 @@ export async function getClaimContext(claimId: string): Promise<ClaimContextDTO 
 
       const rollup = rollupTrade(
         { id: trade.id, name: trade.name, itemNo: trade.itemNo, isVariations: trade.isVariations },
-        lineResults.filter((_, i) => !sortedLines[i].lineItem.isHeader)
+        lineResults.filter((_, i) => !sortedLines[i].isHeader)
       );
 
       const lineItems: LineItemDTO[] = sortedLines.map((cl, i) => {
@@ -122,9 +136,9 @@ export async function getClaimContext(claimId: string): Promise<ClaimContextDTO 
         return {
           id: cl.lineItem.id,
           itemNo: cl.lineItem.itemNo,
-          description: cl.lineItem.description,
-          isHeader: cl.lineItem.isHeader,
-          contractSumCents: centsToNumber(cl.lineItem.contractSumCents),
+          description: cl.description,
+          isHeader: cl.isHeader,
+          contractSumCents: centsToNumber(cl.contractSumCents),
           percentCompleteBps: r.percentCompleteBps,
           previousPercentBps: r.previousPercentBps,
           previousClaimCents: centsToNumber(r.previousClaimCents),
@@ -133,6 +147,7 @@ export async function getClaimContext(claimId: string): Promise<ClaimContextDTO 
           deltaPercentBps: r.deltaPercentBps,
           thisClaimAmountCents: centsToNumber(r.thisClaimAmountCents),
           costToCompleteCents: centsToNumber(r.costToCompleteCents),
+          canDelete: (otherClaimCount.get(cl.lineItemId) ?? 1) <= 1,
         };
       });
 
@@ -157,11 +172,11 @@ export async function getClaimContext(claimId: string): Promise<ClaimContextDTO 
     .sort((a, b) => a.trade.sortOrder - b.trade.sortOrder)
     .map(({ trade, lines }) => {
       const lineResults = lines
-        .filter((cl) => !cl.lineItem.isHeader)
+        .filter((cl) => !cl.isHeader)
         .map((cl) =>
           calcLineItem({
             lineItemId: cl.lineItemId,
-            contractSumCents: cl.lineItem.contractSumCents,
+            contractSumCents: cl.contractSumCents,
             percentCompleteBps: cl.percentCompleteBps,
             previousPercentBps: cl.previousPercentBps,
             previousClaimCents: cl.previousClaimCents,

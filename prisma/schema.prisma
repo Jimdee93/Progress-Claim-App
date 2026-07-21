@@ -59,6 +59,12 @@ model LineItem {
   trade   Trade  @relation(fields: [tradeId], references: [id], onDelete: Cascade)
 
   itemNo          String // e.g. "1.01" — string, source workbook uses decimal-like numbering
+  // Current/template description, contract sum and header-flag — seeds a new
+  // ClaimLine's own snapshot when a claim is created or rolled forward.
+  // Editing these only changes what NEW claims start from; a claim that has
+  // already been submitted/approved keeps showing its own frozen snapshot
+  // (stored on ClaimLine below), so correcting a mistake later never
+  // silently rewrites a past payment claim's figures.
   description     String
   contractSumCents BigInt @default(0)
   // Group header rows (e.g. "BUILDING A") carry a description but no figures.
@@ -112,6 +118,14 @@ model ClaimLine {
 
   lineItemId String
   lineItem   LineItem @relation(fields: [lineItemId], references: [id], onDelete: Cascade)
+
+  // This claim's own frozen snapshot of the line item, taken when the claim
+  // was created/rolled forward. Editing a line item on a DRAFT claim writes
+  // here (this claim only) and to LineItem's template fields (future claims
+  // only) — never to any other claim's snapshot.
+  description      String
+  contractSumCents BigInt  @default(0)
+  isHeader         Boolean @default(false)
 
   // This claim, cumulative % complete (basis points, 0-1,000,000 = 0-100.0000%)
   percentCompleteBps Int @default(0)

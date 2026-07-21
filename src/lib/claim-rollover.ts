@@ -52,6 +52,12 @@ export async function createNextClaim(projectId: string, periodEndDate: Date) {
         id: randomUUID(),
         claimId: nextClaim.id,
         lineItemId: cl.lineItemId,
+        // Snapshot the line item's *current* template state — picks up any
+        // description/contract-sum edits made since the prior claim, while
+        // that prior claim's own snapshot stays untouched.
+        description: cl.lineItem.description,
+        contractSumCents: cl.lineItem.contractSumCents,
+        isHeader: cl.lineItem.isHeader,
         percentCompleteBps: previousPercentBps,
         previousPercentBps,
         previousClaimCents: cumulativeCertifiedCents,

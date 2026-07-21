@@ -68,6 +68,9 @@ export async function importParsedWorkbook(parsed: ParsedWorkbook, options: Impo
       id: string;
       claimId: string;
       lineItemId: string;
+      description: string;
+      contractSumCents: bigint;
+      isHeader: boolean;
       percentCompleteBps: number;
       previousPercentBps: number;
       previousClaimCents: bigint;
@@ -91,6 +94,9 @@ export async function importParsedWorkbook(parsed: ParsedWorkbook, options: Impo
           id: randomUUID(),
           claimId: claim.id,
           lineItemId,
+          description: li.description,
+          contractSumCents: li.contractSumCents,
+          isHeader: li.isHeader,
           // This seed claim represents an already-certified historical
           // claim, so its own "this claim" % IS the approved cumulative
           // baseline the next claim will roll forward from.

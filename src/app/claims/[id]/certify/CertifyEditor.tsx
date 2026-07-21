@@ -200,8 +200,10 @@ export default function CertifyEditor({ initial }: { initial: ClaimContextDTO })
                 <tr className="text-left text-slate-500 border-t border-slate-100">
                   <th className="px-4 py-2 font-normal">#</th>
                   <th className="px-4 py-2 font-normal">Description</th>
+                  <th className="px-4 py-2 font-normal text-right">Contract sum</th>
                   <th className="px-4 py-2 font-normal text-right">Claimed</th>
                   <th className="px-4 py-2 font-normal text-right w-32">Certified</th>
+                  <th className="px-4 py-2 font-normal text-right">Cost to complete</th>
                 </tr>
               </thead>
               <tbody>
@@ -210,16 +212,20 @@ export default function CertifyEditor({ initial }: { initial: ClaimContextDTO })
                     return (
                       <tr key={li.id} className="border-t border-slate-100 bg-slate-50/50">
                         <td className="px-4 py-1.5 text-slate-400">{li.itemNo}</td>
-                        <td className="px-4 py-1.5 font-medium text-slate-600" colSpan={3}>
+                        <td className="px-4 py-1.5 font-medium text-slate-600" colSpan={4}>
                           {li.description}
                         </td>
                       </tr>
                     );
                   }
+                  const certifiedThisClaimCents = Math.round(Number(certified[li.id] ?? "0") * 100);
+                  const certifiedCostToCompleteCents =
+                    li.contractSumCents - (li.previousClaimCents + certifiedThisClaimCents);
                   return (
                     <tr key={li.id} className="border-t border-slate-100">
                       <td className="px-4 py-1.5 text-slate-400">{li.itemNo}</td>
                       <td className="px-4 py-1.5">{li.description}</td>
+                      <td className="px-4 py-1.5 text-right text-slate-500">{formatCents(li.contractSumCents)}</td>
                       <td className="px-4 py-1.5 text-right">
                         {formatCents(li.thisClaimAmountCents, { signDisplay: "always" })}
                       </td>
@@ -231,6 +237,9 @@ export default function CertifyEditor({ initial }: { initial: ClaimContextDTO })
                           onChange={(e) => updateCertifiedLine(li.id, e.target.value)}
                           className="w-28 rounded border border-slate-300 px-2 py-1 text-right"
                         />
+                      </td>
+                      <td className="px-4 py-1.5 text-right text-slate-500">
+                        {formatCents(certifiedCostToCompleteCents)}
                       </td>
                     </tr>
                   );

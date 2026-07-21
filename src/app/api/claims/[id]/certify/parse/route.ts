@@ -37,8 +37,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     lineItemId: cl.lineItemId,
     tradeItemNo: cl.lineItem.trade.itemNo,
     lineItemNo: cl.lineItem.itemNo,
-    isHeader: cl.lineItem.isHeader,
-    contractSumCents: cl.lineItem.contractSumCents,
+    isHeader: cl.isHeader,
+    contractSumCents: cl.contractSumCents,
     previousClaimCents: cl.previousClaimCents,
   }));
 
