@@ -35,3 +35,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   return NextResponse.json({ ok: true });
 }
+
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+  const project = await prisma.project.findUnique({ where: { id } });
+  if (!project) return NextResponse.json({ error: "No project found" }, { status: 404 });
+
+  // Trades/LineItems/Claims/ClaimLines all cascade from Project in the schema.
+  await prisma.project.delete({ where: { id } });
+
+  return NextResponse.json({ ok: true });
+}

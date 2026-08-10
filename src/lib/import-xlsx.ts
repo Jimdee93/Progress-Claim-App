@@ -40,24 +40,33 @@ export interface ParsedWorkbook {
   warnings: string[];
 }
 
-function cellValue(sheet: XLSX.WorkSheet, addr: string): unknown {
+export function cellValue(sheet: XLSX.WorkSheet, addr: string): unknown {
   const cell = sheet[addr];
   return cell ? cell.v : undefined;
 }
 
-function asNumber(v: unknown): number | undefined {
+// True when a cell holds a live formula rather than a plain input value —
+// callers that write values back into an existing workbook (the claim reset
+// module) use this to make sure they only ever overwrite genuine inputs,
+// never clobber a formula the source template depends on.
+export function cellIsFormula(sheet: XLSX.WorkSheet, addr: string): boolean {
+  const cell = sheet[addr];
+  return !!cell && cell.f !== undefined;
+}
+
+export function asNumber(v: unknown): number | undefined {
   if (typeof v === "number" && Number.isFinite(v)) return v;
   if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) return Number(v);
   return undefined;
 }
 
-function asString(v: unknown): string | undefined {
+export function asString(v: unknown): string | undefined {
   if (typeof v === "string" && v.trim() !== "") return v.trim();
   if (typeof v === "number") return String(v);
   return undefined;
 }
 
-function parseClaimNumber(text: string | undefined, warnings: string[]): number {
+export function parseClaimNumber(text: string | undefined, warnings: string[]): number {
   const match = text?.match(/No\.?\s*(\d+)/i);
   if (match) return Number(match[1]);
   warnings.push(`Could not parse claim number from "${text}" — defaulting to 1.`);
@@ -69,7 +78,7 @@ const MONTHS = [
   "july", "august", "september", "october", "november", "december",
 ];
 
-function parseDateText(text: string | undefined, warnings: string[]): Date {
+export function parseDateText(text: string | undefined, warnings: string[]): Date {
   if (text) {
     const match = text.match(/(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/);
     if (match) {
@@ -83,7 +92,7 @@ function parseDateText(text: string | undefined, warnings: string[]): Date {
   return new Date();
 }
 
-function findHeaderRow(sheet: XLSX.WorkSheet, range: XLSX.Range): number | null {
+export function findHeaderRow(sheet: XLSX.WorkSheet, range: XLSX.Range): number | null {
   for (let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 15); r++) {
     for (let c = range.s.c; c <= range.e.c; c++) {
       const text = cellValue(sheet, XLSX.utils.encode_cell({ r, c }));
@@ -97,19 +106,31 @@ function findHeaderRow(sheet: XLSX.WorkSheet, range: XLSX.Range): number | null 
 // table) for a cell matching `pattern`, reading left-to-right, top-to-bottom
 // across every column — the label's row/column varies between templates
 // (e.g. project name sits at B3 in one workbook, D3 in another).
-function findTextMatching(
+// Same scan as findTextMatching, but returns the cell's own coordinates too
+// — needed by callers that write a corrected value back into that exact
+// cell (the claim reset module), not just ones that read it.
+export function findTextCellMatching(
+  sheet: XLSX.WorkSheet,
+  range: XLSX.Range,
+  pattern: RegExp,
+  maxRows = 15
+): { row: number; col: number; text: string } | undefined {
+  for (let r = range.s.r; r <= Math.min(range.e.r, range.s.r + maxRows); r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const text = asString(cellValue(sheet, XLSX.utils.encode_cell({ r, c })));
+      if (text && pattern.test(text)) return { row: r, col: c, text };
+    }
+  }
+  return undefined;
+}
+
+export function findTextMatching(
   sheet: XLSX.WorkSheet,
   range: XLSX.Range,
   pattern: RegExp,
   maxRows = 15
 ): string | undefined {
-  for (let r = range.s.r; r <= Math.min(range.e.r, range.s.r + maxRows); r++) {
-    for (let c = range.s.c; c <= range.e.c; c++) {
-      const text = asString(cellValue(sheet, XLSX.utils.encode_cell({ r, c })));
-      if (text && pattern.test(text)) return text;
-    }
-  }
-  return undefined;
+  return findTextCellMatching(sheet, range, pattern, maxRows)?.text;
 }
 
 const HEADER_BOILERPLATE_PATTERNS = [
@@ -134,7 +155,7 @@ function findProjectName(sheet: XLSX.WorkSheet, range: XLSX.Range, maxRows = 15)
   return undefined;
 }
 
-interface SummaryColumnMap {
+export interface SummaryColumnMap {
   itemNo: number;
   name: number;
   contractSum: number;
@@ -148,7 +169,7 @@ interface SummaryColumnMap {
 // COMPLETE" / "PREVIOUSLY CLAIMED" columns, others only have "PREVIOUSLY
 // CLAIMED" and derive the % from it. Detect both the row and the columns
 // from their labels rather than assuming fixed positions.
-function findSummaryHeaderRow(sheet: XLSX.WorkSheet, range: XLSX.Range): number | null {
+export function findSummaryHeaderRow(sheet: XLSX.WorkSheet, range: XLSX.Range): number | null {
   for (let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 20); r++) {
     let hasItem = false;
     let hasTrade = false;
@@ -164,7 +185,7 @@ function findSummaryHeaderRow(sheet: XLSX.WorkSheet, range: XLSX.Range): number 
   return null;
 }
 
-function buildSummaryColumnMap(sheet: XLSX.WorkSheet, headerRow: number, lastCol: number): Partial<SummaryColumnMap> {
+export function buildSummaryColumnMap(sheet: XLSX.WorkSheet, headerRow: number, lastCol: number): Partial<SummaryColumnMap> {
   const map: Partial<SummaryColumnMap> = {};
   let sawFirstPercent = false;
 
@@ -187,7 +208,7 @@ function buildSummaryColumnMap(sheet: XLSX.WorkSheet, headerRow: number, lastCol
   return map;
 }
 
-interface TradeColumnMap {
+export interface TradeColumnMap {
   itemNo: number;
   description: number;
   contractSum: number;
@@ -199,7 +220,7 @@ interface TradeColumnMap {
 // Some trade sheets insert QTY/UNIT/RATE columns before TOTAL, shifting
 // everything right (A-M instead of A-J). Read the header row's own labels
 // rather than assuming fixed column letters, so both layouts parse the same.
-function buildColumnMap(sheet: XLSX.WorkSheet, headerRow: number, lastCol: number): Partial<TradeColumnMap> {
+export function buildColumnMap(sheet: XLSX.WorkSheet, headerRow: number, lastCol: number): Partial<TradeColumnMap> {
   const map: Partial<TradeColumnMap> = {};
   let pastPreviousClaim = false;
 

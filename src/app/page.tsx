@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { auth, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { formatCents } from "@/lib/money";
+import ProjectCard from "./ProjectCard";
 
 // Always reflects live DB state — never prerender this at build time.
 export const dynamic = "force-dynamic";
@@ -45,24 +45,17 @@ export default async function ProjectsPage() {
           const latestClaim = project.claims[0] ?? null;
 
           return (
-            <Link
+            <ProjectCard
               key={project.id}
-              href={`/projects/${project.id}`}
-              className="bg-white border border-slate-200 rounded-lg p-5 hover:border-slate-400 transition-colors"
-            >
-              <h2 className="font-semibold text-slate-900">{project.name}</h2>
-              <p className="text-sm text-slate-600 mt-1">{formatCents(totalContractValueCents)}</p>
-              <div className="mt-3 text-sm text-slate-500">
-                {latestClaim ? (
-                  <span>
-                    Claim No.{latestClaim.claimNumber} —{" "}
-                    <StatusBadge status={latestClaim.status} />
-                  </span>
-                ) : (
-                  <span>No claims yet</span>
-                )}
-              </div>
-            </Link>
+              project={{
+                id: project.id,
+                name: project.name,
+                totalContractValueCents: Number(totalContractValueCents),
+                latestClaim: latestClaim
+                  ? { claimNumber: latestClaim.claimNumber, status: latestClaim.status }
+                  : null,
+              }}
+            />
           );
         })}
 
@@ -72,6 +65,17 @@ export default async function ProjectsPage() {
         >
           <span className="text-2xl leading-none">+</span>
           <span className="text-sm font-medium">New project</span>
+        </Link>
+
+        <Link
+          href="/reset"
+          className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-300 rounded-lg p-5 text-slate-500 hover:border-slate-400 hover:text-slate-700 transition-colors min-h-[120px]"
+        >
+          <span className="text-2xl leading-none">↻</span>
+          <span className="text-sm font-medium">Claim Reset Module</span>
+          <span className="text-xs text-slate-400 text-center px-2">
+            Upload a claim workbook + certified figures, download it reset — no project created
+          </span>
         </Link>
       </div>
 
@@ -83,13 +87,4 @@ export default async function ProjectsPage() {
       )}
     </div>
   );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    DRAFT: "text-slate-600",
-    SUBMITTED: "text-amber-700",
-    APPROVED: "text-green-700",
-  };
-  return <span className={`font-medium ${styles[status] ?? ""}`}>{status}</span>;
 }
